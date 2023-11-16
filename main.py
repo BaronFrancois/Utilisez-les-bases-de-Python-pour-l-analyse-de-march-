@@ -4,6 +4,22 @@ import requests  # For making HTTP requests
 from bs4 import BeautifulSoup  # For parsing HTML
 from urllib.parse import urljoin  # For joining URLs
 import csv  # For writing to CSV files
+from pathlib import Path
+
+
+def download_image(image_url, folder="images", file_name=None):
+   # If no file name is specified, use the last part of the image URL
+    if not file_name:
+        file_name = image_url.split('/')[-1]
+    # Replace unwanted characters in file name
+    file_name = file_name.replace('/', '_').replace('\\', '_').replace(':', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_')
+    # Full path to save the image
+    path_to_save = Path(folder) / file_name
+    # Download and save the image
+    response = requests.get(image_url)
+    if response.status_code == 200:
+        with open(path_to_save, 'wb') as file:
+            file.write(response.content)
 
 # Function to extract the category from the HTML soup
 def extract_category(soup):
@@ -73,51 +89,68 @@ def scrape_book(url):
     # Return the dictionary containing all the scraped data
     return product_data
 
-# Function to scrape the listing page and get all book URLs
-def scrape_listing_page(url):
-    # Send a request to the listing page and get the response content
-    response = requests.get(url)
+# Function to get category URLs from the homepage
+def get_category_urls(homepage_url):
+    # Send a request to the homepage and parse the HTML response
+    response = requests.get(homepage_url)
     soup = BeautifulSoup(response.text, 'html.parser')
+    # Select and extract category links from the sidebar
+    category_links = soup.select('.side_categories ul li ul li a')
+    # Create a dictionary to store category names and their corresponding URLs
+    return {link.get_text().strip(): urljoin(homepage_url, link['href']) for link in category_links}
 
-    # Find all book entries on the page
-    books = soup.find_all('article', class_='product_pod')
+# Function to get product URLs for a category
+def get_product_urls(category_url):
+    urls = []
+    while True:
+        # Send a request to the category page and parse the HTML response
+        response = requests.get(category_url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # Find all book articles in the category
+        books = soup.find_all('article', class_='product_pod')
+        # Extract and append the URLs of the book products to the 'urls' list
+        urls.extend(urljoin(category_url, book.find('h3').find('a')['href']) for book in books)
 
-    # List to store URLs of individual book pages
-    book_urls = [urljoin(url, book.find('h3').find('a')['href']) for book in books]
+        # Check for the presence of a 'next' button to paginate through pages
+        next_button = soup.find('li', class_='next')
+        if not next_button:
+            break
+        # Update the category URL to the URL of the next page
+        category_url = urljoin(category_url, next_button.find('a')['href'])
+    return urls
 
-    # Return the list of URLs
-    return book_urls
-
-# Main script execution
+# Main script
 if __name__ == "__main__":
-    # URL of the page with book listings
-    listing_url = "https://books.toscrape.com/catalogue/category/books_1/index.html"
-    # Scrape the listing page for book URLs
-    book_urls = scrape_listing_page(listing_url)
+    homepage_url = "https://books.toscrape.com/index.html"
+    # Get category URLs from the homepage
+    categories = get_category_urls(homepage_url)
 
-    # List to store data of all books
-    all_book_data = []
+    for category_name, category_url in categories.items():
+        print(f"Processing category: {category_name}")
+        # Get product URLs for the current category
+        product_urls = get_product_urls(category_url)
 
-    # Loop through each book URL to scrape information
-    for url in book_urls:
-        try:
-            # Scrape data for the current book
-            book_data = scrape_book(url)
-            # Add the scraped data to the list
-            all_book_data.append(book_data)
-            # Print the title of the book that was just scraped
-            print(f"Scraped data for {book_data['Title']}")
-        except Exception as e:
-            # Print an error message if scraping fails
-            print(f"Failed to scrape data for url {url}: {e}")
+        all_book_data = []
+        for url in product_urls:
+            try:
+                # Scrape data for each book product
+                book_data = scrape_book(url)
+                if book_data:
+                    all_book_data.append(book_data)
+                    # Use the book title as the image file name
+                    image_file_name = f"{book_data['Title'].replace(' ', '_')}.jpg"
+                    download_image(book_data['Image URL'], file_name=image_file_name)  # Download the image
+                    print(f"Scraped data for {book_data['Title']}")
+            except Exception as e:
+                print(f"Failed to scrape data for url {url}: {e}")
 
-    # Write the scraped data to a CSV file
-    csv_file = "books_data.csv"
-    with open(csv_file, mode="w", newline='', encoding='utf-8') as file:
-        writer = csv.DictWriter(file, fieldnames=all_book_data[0].keys())
-        writer.writeheader()
-        for book_data in all_book_data:
-            writer.writerow(book_data)
-
-    # Print a message indicating the completion of the CSV writing process
-    print(f"Data for all books has been written to {csv_file}")
+        if all_book_data:
+            csv_file = f"csv_data/{category_name.replace(' ', '_')}_data.csv"
+            with open(csv_file, mode="w", newline='', encoding='utf-8') as file:
+                writer = csv.DictWriter(file, fieldnames=all_book_data[0].keys())
+                writer.writeheader()
+                for book_data in all_book_data:
+                    writer.writerow(book_data)
+            print(f"Data for category {category_name} has been written to {csv_file}")
+        else:
+            print(f"No data to write for category {category_name}")
