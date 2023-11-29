@@ -7,6 +7,9 @@ import csv  # To read from and write to CSV files, a common file format for data
 from pathlib import Path  # For file system path manipulation, making file handling easier and more readable.
 
 
+# --- Section: Independent Functions ---
+
+#6/ Called by extract_book_details(-4-) to download and save book images.
 def download_book_image(image_url, category, file_name=None):
     # Creates a path object combining the 'images' folder and the book's category. It ensures neat organization.
     folder = Path("images") / category  
@@ -30,7 +33,10 @@ def download_book_image(image_url, category, file_name=None):
 
 
 
-# Function to extract the category from the HTML soup
+#5/ Helper functions called by extract_book_details(-4-) to extract the category and review rating of a book.
+# {
+    
+# 5.1/
 def get_book_category(soup):
     # Searches the parsed HTML ('soup') for the breadcrumb trail, which usually contains the category information.
     breadcrumb = soup.find('ul', class_='breadcrumb')  
@@ -44,7 +50,7 @@ def get_book_category(soup):
         return 'No category'  # Returns 'No category' if the breadcrumb trail is not found.
 
 
-# Function to extract the review rating from the HTML soup
+#5.2/ Function to extract the review rating from the HTML soup
 def get_book_review_rating(soup):
     # Finds the paragraph with the class 'star-rating', which contains the book's review rating.
     rating_element = soup.find('p', class_='star-rating')  
@@ -56,9 +62,16 @@ def get_book_review_rating(soup):
         return rating_conversion.get(rating_text, "No rating")  # Returns the numerical rating.
     else:
         return "No rating"  # Returns 'No rating' if the rating element is not found.
+# }
 
 
-# Function to scrape individual book details from its page
+# --- Section: Scraping Specific Functions ---
+
+
+# Main scraping function for each book. Calls get_book_category(soup)(-5.1-) and get_book_review_rating(soup)(-5.2-) to extract specific information. Can call download_book_image(6) to download the book image.
+# {
+
+#4/ Function to scrape individual book details from its page
 def extract_book_details(url):
     # Sends an HTTP request to the provided book page URL and gets the response.
     response = requests.get(url)  
@@ -100,17 +113,14 @@ def extract_book_details(url):
                 product_data["Number Available"] = match.group(1) if match else "0"
 
     return product_data  # Returns the dictionary containing all the scraped data.
+# }
 
 
-# Function to get category URLs from the homepage
-def retrieve_category_links(homepage_url):
-    # Sends an HTTP request to the homepage and parses the HTML response.
-    response = requests.get(homepage_url)  
-    soup = BeautifulSoup(response.text, 'html.parser')  
-    # Selects category links from the sidebar of the webpage.
-    category_links = soup.select('.side_categories ul li ul li a')  
-    # Creates a dictionary mapping category names to their URLs.
-    return {link.get_text().strip(): urljoin(homepage_url, link['href']) for link in category_links}
+# --- Section: Higher Level Functions ---
+
+
+#3/ For each category, retrieve the URLs of all books. Each book URL is passed to extract_book_details(-4-).
+# {
 
 # Function to get product URLs for a category
 def retrieve_books_in_category(category_url):
@@ -132,8 +142,29 @@ def retrieve_books_in_category(category_url):
         category_url = urljoin(category_url, next_button.find('a')['href'])  
     return urls  # Returns the list of all product URLs found in the category.
 
+# }
 
-# Main script
+#2/ Retrieves category links from the home page.Each category link is then processed by retrieve_books_in_category(-3-).
+
+# {
+# Function to get category URLs from the homepage
+def retrieve_category_links(homepage_url):
+    # Sends an HTTP request to the homepage and parses the HTML response.
+    response = requests.get(homepage_url)  
+    soup = BeautifulSoup(response.text, 'html.parser')  
+    # Selects category links from the sidebar of the webpage.
+    category_links = soup.select('.side_categories ul li ul li a')  
+    # Creates a dictionary mapping category names to their URLs.
+    return {link.get_text().strip(): urljoin(homepage_url, link['href']) for link in category_links}
+# }
+
+
+# --- Section: Point d'Entrée Principal ---
+
+
+# 1/ Starts the scraping process. Call retrieve_category_links directly and iterate through each category.
+# {
+
 # Main script
 if __name__ == "__main__":
     # This conditional checks if the script is being run as the main program and not being imported as a module.
@@ -207,3 +238,4 @@ if __name__ == "__main__":
             # Executes if no book data was collected for the current category.
             print(f"No data to write for category {category_name}")
             # Prints a message indicating that there is no data to write for the current category.
+# }
