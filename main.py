@@ -35,7 +35,7 @@ def download_book_image(image_url, category, file_name=None):
 
 #5/ Helper functions called by extract_book_details(-4-) to extract the category and review rating of a book.
 # {
-    
+
 # 5.1/
 def get_book_category(soup):
     # Searches the parsed HTML ('soup') for the breadcrumb trail, which usually contains the category information.
@@ -162,7 +162,7 @@ def retrieve_category_links(homepage_url):
 # --- Section: Point d'Entrée Principal ---
 
 
-# 1/ Starts the scraping process. Call retrieve_category_links directly and iterate through each category.
+# 1/ Starts the scraping process. Call retrieve_category_links(-2-) directly and iterate through each category.
 # {
 
 # Main script
@@ -214,6 +214,8 @@ if __name__ == "__main__":
                 # Prints a message indicating failure in data scraping along with the error.
 
         if all_book_data:
+            # create folder for csv data if it doesn't exists.
+            Path("csv_data").mkdir(parents=True, exist_ok=True)
             # Checks if there is any book data collected for the current category.
             csv_file = f"csv_data/{category_name.replace(' ', '_')}_data.csv"
             # Sets the file path for the CSV file where the data will be saved, named after the category.
